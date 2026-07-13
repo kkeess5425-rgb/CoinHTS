@@ -24,6 +24,10 @@ import pyqtgraph as pg
 from core.config import AppConfig, get_config
 from core.events import EventBus, get_event_bus
 from core.models import Timeframe
+from ui.chart_widget import MainChartWidget
+from ui.scanner_widget import ScannerWidget
+from ui.footprint_widget import FootprintWidget
+from ui.heatmap_widget import HeatmapWidget
 
 logger = logging.getLogger(__name__)
 
@@ -334,9 +338,26 @@ class MainWindow(QMainWindow):
         self._toolbar.timeframe_changed.connect(self._on_timeframe_changed)
 
     def _setup_central(self) -> None:
-        """중앙 차트 영역."""
-        self._chart = ChartWidget(self)
-        self.setCentralWidget(self._chart)
+        """중앙 차트 영역 — 탭으로 차트/Footprint 전환."""
+        from PySide6.QtWidgets import QTabWidget
+        self._tabs = QTabWidget()
+        self._tabs.setStyleSheet("""
+            QTabWidget::pane { border: none; background: #0d1117; }
+            QTabBar::tab { background: #21262d; color: #8b949e; padding: 6px 16px;
+                           border: none; font-size: 11px; }
+            QTabBar::tab:selected { background: #0d1117; color: #c9d1d9;
+                                    border-bottom: 2px solid #1f6feb; }
+        """)
+        # 메인 차트
+        self._chart = MainChartWidget()
+        self._tabs.addTab(self._chart, "📈 차트")
+        # Footprint
+        self._footprint = FootprintWidget(tick_size=0.5)
+        self._tabs.addTab(self._footprint, "📊 Footprint")
+        # 히트맵
+        self._heatmap = HeatmapWidget()
+        self._tabs.addTab(self._heatmap, "🌡 히트맵")
+        self.setCentralWidget(self._tabs)
 
     def _setup_docks(self) -> None:
         """도크 패널들 (드래그로 재배치 가능)."""
@@ -353,6 +374,14 @@ class MainWindow(QMainWindow):
         sig_dock.setWidget(self._signal_log)
         sig_dock.setMaximumHeight(200)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, sig_dock)
+
+        # 스캐너 (아래 탭 형태로)
+        self._scanner_widget = ScannerWidget()
+        self._scanner_widget.signal_clicked.connect(self._on_scanner_signal_clicked)
+        scan_dock = QDockWidget("🔍 스캐너", self)
+        scan_dock.setWidget(self._scanner_widget)
+        scan_dock.setMaximumHeight(250)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, scan_dock)
 
     def _setup_statusbar(self) -> None:
         bar = QStatusBar()
@@ -385,9 +414,16 @@ class MainWindow(QMainWindow):
     def _on_orderbook(self, book) -> None:
         if book.symbol == self._toolbar.current_symbol:
             self._book_widget.update_book(book)
+            self._heatmap.on_orderbook(book)
 
     def _on_signal(self, sig) -> None:
         self._signal_log.add_signal(sig)
+
+    def _on_scanner_signal_clicked(self, symbol: str, ts: float) -> None:
+        """스캐너 신호 더블클릭 → 해당 심볼로 차트 전환."""
+        idx = self._toolbar._sym_combo.findText(symbol)
+        if idx >= 0:
+            self._toolbar._sym_combo.setCurrentIndex(idx)
 
     def _on_symbol_changed(self, sym: str) -> None:
         logger.info(f"심볼 변경: {sym}")
