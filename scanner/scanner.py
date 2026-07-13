@@ -50,6 +50,7 @@ class ScannerConfig:
     sweep_enabled:        bool  = True
     sweep_lookback:       int   = 20
     sweep_confirm_dist:   float = 0.3    # ATR 배수
+    cooldown_seconds:     float = 60.0   # 신호 쿨다운 (초)
 
 
 class MarketScanner:
@@ -78,7 +79,7 @@ class MarketScanner:
 
         # 신호 쿨다운 (같은 신호 반복 방지)
         self._last_signal: dict[str, float] = {}
-        self._cooldown     = 60.0   # 60초
+        self._cooldown     = self.cfg.cooldown_seconds
 
     # ── 데이터 수신 ──────────────────────────────────
     def on_candle(self, candle: Candle) -> None:
