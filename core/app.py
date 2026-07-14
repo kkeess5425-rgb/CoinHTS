@@ -253,11 +253,24 @@ class CoinHTSApp:
         """앱 시작 — 모든 백그라운드 태스크 실행."""
         self._running = True
 
+        # Numba JIT 사전 컴파일 (첫 사용 지연 방지)
+        await asyncio.get_event_loop().run_in_executor(None, self._warmup_numba)
+
         # DB 초기화
         await self.storage.initialize()
 
         # 초기 데이터 로드
         await self.load_initial_data()
+
+    @staticmethod
+    def _warmup_numba() -> None:
+        """Numba JIT 사전 컴파일 — 앱 시작 시 1회만 실행."""
+        import numpy as np
+        from indicators.base_indicators import ema, atr, rsi, vwap
+        p = np.random.randn(50) + 65000.0
+        h = p + 10; l = p - 10; v = np.abs(np.random.randn(50)) * 100
+        ema(p, 5); atr(h, l, p, 5); rsi(p, 5); vwap(h, l, p, v)
+        logger.info("[App] Numba JIT 워밍업 완료")
 
         # 백그라운드 태스크
         asyncio.create_task(self.feed.start(),     name="ws_feed")
