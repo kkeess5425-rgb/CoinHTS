@@ -79,6 +79,15 @@ class AppConfig:
         cfg.alert.telegram_chat_id = data.get("telegram_chat_id", "")
         return cfg
 
+    def default_tick_size(self, symbol: str) -> float:
+        """심볼별 기본 틱 사이즈."""
+        mapping = {
+            "BTC-USDT-SWAP": 0.5,
+            "ETH-USDT-SWAP": 0.01,
+            "SOL-USDT-SWAP": 0.001,
+        }
+        return mapping.get(symbol, 0.1)
+
     def save(self, path: str = "config.json") -> None:
         """현재 설정을 JSON으로 저장 (API 키 제외)."""
         data = {

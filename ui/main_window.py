@@ -25,6 +25,8 @@ from core.config import AppConfig, get_config
 from core.events import EventBus, get_event_bus
 from core.models import Timeframe
 from ui.chart_widget import MainChartWidget
+from ui.drawing_tools import DrawingToolBar, DrawingManager, DrawMode
+from ui.time_sales import TimeSalesWidget
 from ui.scanner_widget import ScannerWidget
 from ui.footprint_widget import FootprintWidget
 from ui.heatmap_widget import HeatmapWidget
@@ -336,6 +338,13 @@ class MainWindow(QMainWindow):
         self.addToolBar(self._toolbar)
         self._toolbar.symbol_changed.connect(self._on_symbol_changed)
         self._toolbar.timeframe_changed.connect(self._on_timeframe_changed)
+        # 드로잉 툴바 (두 번째 줄)
+        self.addToolBarBreak()
+        self._drawing_toolbar = DrawingToolBar(self)
+        draw_toolbar_wrapper = self.addToolBar("Drawing")
+        draw_toolbar_wrapper.addWidget(self._drawing_toolbar)
+        self._drawing_toolbar.mode_changed.connect(self._on_draw_mode_changed)
+        self._drawing_manager: DrawingManager | None = None
 
     def _setup_central(self) -> None:
         """중앙 차트 영역 — 탭으로 차트/Footprint 전환."""
@@ -375,13 +384,23 @@ class MainWindow(QMainWindow):
         sig_dock.setMaximumHeight(200)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, sig_dock)
 
-        # 스캐너 (아래 탭 형태로)
+        # 스캐너 (아래)
         self._scanner_widget = ScannerWidget()
         self._scanner_widget.signal_clicked.connect(self._on_scanner_signal_clicked)
         scan_dock = QDockWidget("🔍 스캐너", self)
         scan_dock.setWidget(self._scanner_widget)
         scan_dock.setMaximumHeight(250)
         self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, scan_dock)
+
+        # Time & Sales (오른쪽)
+        self._time_sales = TimeSalesWidget(
+            symbol=self._toolbar.current_symbol,
+            whale_size=1.0,
+        )
+        ts_dock = QDockWidget("⏱ Time & Sales", self)
+        ts_dock.setWidget(self._time_sales)
+        ts_dock.setMinimumWidth(220)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, ts_dock)
 
     def _setup_statusbar(self) -> None:
         bar = QStatusBar()
@@ -419,6 +438,18 @@ class MainWindow(QMainWindow):
     def _on_signal(self, sig) -> None:
         self._signal_log.add_signal(sig)
 
+    def _on_draw_mode_changed(self, mode_name: str) -> None:
+        """드로잉 모드 변경."""
+        if mode_name == "DELETE":
+            if self._drawing_manager: self._drawing_manager.delete_last()
+            return
+        if mode_name == "CLEAR_ALL":
+            if self._drawing_manager: self._drawing_manager.clear_all()
+            return
+        if self._drawing_manager:
+            mode = DrawMode[mode_name] if mode_name in DrawMode.__members__ else DrawMode.NONE
+            self._drawing_manager.set_mode(mode, self._drawing_toolbar.current_color)
+
     def _on_scanner_signal_clicked(self, symbol: str, ts: float) -> None:
         """스캐너 신호 더블클릭 → 해당 심볼로 차트 전환."""
         idx = self._toolbar._sym_combo.findText(symbol)
@@ -427,6 +458,8 @@ class MainWindow(QMainWindow):
 
     def _on_symbol_changed(self, sym: str) -> None:
         logger.info(f"심볼 변경: {sym}")
+        if hasattr(self, '_time_sales'):
+            self._time_sales.set_symbol(sym)
         self.bus.publish_nowait("symbol_changed", sym)
 
     def _on_timeframe_changed(self, tf: str) -> None:
