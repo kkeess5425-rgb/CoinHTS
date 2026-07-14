@@ -62,8 +62,12 @@ class EventBus:
         동기 컨텍스트에서 이벤트 발행 (fire-and-forget).
         이벤트 루프가 실행 중이어야 한다.
         """
-        loop = asyncio.get_event_loop()
-        loop.create_task(self.publish(event, data))
+        try:
+            loop = asyncio.get_running_loop()
+            loop.create_task(self.publish(event, data))
+        except RuntimeError:
+            # 이벤트 루프가 없는 경우 (테스트 등) — 무시
+            pass
 
     # ── 이벤트 이름 상수 ─────────────────────────────
     class Events:
