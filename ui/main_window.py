@@ -26,6 +26,8 @@ from core.events import EventBus, get_event_bus
 from core.models import Timeframe
 from ui.chart_widget import MainChartWidget
 from ui.drawing_tools import DrawingToolBar, DrawingManager, DrawMode
+from ui.multi_chart import MultiChartWidget, LayoutMode
+from ui.settings_dialog import SettingsDialog
 from ui.time_sales import TimeSalesWidget
 from ui.scanner_widget import ScannerWidget
 from ui.footprint_widget import FootprintWidget
@@ -113,6 +115,13 @@ class MarketToolBar(QToolBar):
         self._status_label = QLabel("● 연결 중...")
         self._status_label.setStyleSheet("color: #e3b341;")
         self.addWidget(self._status_label)
+        self.addSeparator()
+        # 설정 버튼
+        settings_btn = QPushButton("⚙️")
+        settings_btn.setToolTip("설정")
+        settings_btn.clicked.connect(self._open_settings)
+        self.addWidget(settings_btn)
+        self._settings_callback = None
 
     def set_connected(self, ok: bool) -> None:
         if ok:
@@ -121,6 +130,10 @@ class MarketToolBar(QToolBar):
         else:
             self._status_label.setText("● 연결 끊김")
             self._status_label.setStyleSheet("color: #f85149;")
+
+    def _open_settings(self) -> None:
+        if self._settings_callback:
+            self._settings_callback()
 
     @property
     def current_symbol(self) -> str:
@@ -322,6 +335,7 @@ class MainWindow(QMainWindow):
         self._setup_docks()
         self._setup_statusbar()
         self._connect_events()
+        self._setup_settings()
 
     def _setup_window(self) -> None:
         self.setWindowTitle("CoinHTS — Professional Crypto Trading Terminal")
@@ -360,6 +374,9 @@ class MainWindow(QMainWindow):
         # 메인 차트
         self._chart = MainChartWidget()
         self._tabs.addTab(self._chart, "📈 차트")
+        # 멀티 차트
+        self._multi_chart = MultiChartWidget()
+        self._tabs.addTab(self._multi_chart, "📊 멀티차트")
         # Footprint
         self._footprint = FootprintWidget(tick_size=0.5)
         self._tabs.addTab(self._footprint, "📊 Footprint")
@@ -414,6 +431,22 @@ class MainWindow(QMainWindow):
         bar.addWidget(QLabel(" | "))
         bar.addWidget(self._funding_label)
         self.setStatusBar(bar)
+
+    def _setup_settings(self) -> None:
+        """설정 다이얼로그 연결."""
+        self._toolbar._settings_callback = self._open_settings
+        self._ict_params = __import__(
+            'strategy.ict_engine', fromlist=['ICTParams']
+        ).ICTParams()
+
+    def _open_settings(self) -> None:
+        dlg = SettingsDialog(self.config, self._ict_params, self)
+        dlg.settings_applied.connect(self._on_settings_applied)
+        dlg.exec()
+
+    def _on_settings_applied(self) -> None:
+        logger.info("설정 적용됨")
+        self.bus.publish_nowait("settings_changed", self.config)
 
     def _connect_events(self) -> None:
         """EventBus 이벤트 연결."""

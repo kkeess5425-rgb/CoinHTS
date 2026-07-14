@@ -247,3 +247,144 @@ class DataStorage:
         await self.flush()
         if self._conn:
             await self._conn.close()
+
+
+# ── PostgreSQL 지원 추가 ──────────────────────────────
+class PostgreSQLStorage:
+    """
+    PostgreSQL 기반 시장 데이터 저장소.
+    asyncpg 사용. TimescaleDB 호환.
+    pip install asyncpg 필요.
+
+    사용:
+        pg = PostgreSQLStorage("postgresql://user:pass@host:5432/coinhts")
+        await pg.initialize()
+    """
+
+    def __init__(self, dsn: str) -> None:
+        self._dsn   = dsn
+        self._pool  = None
+        self._tick_buffer:   deque = deque()
+        self._candle_buffer: deque = deque()
+        self._flush_task = None
+
+    async def initialize(self) -> None:
+        try:
+            import asyncpg
+            self._pool = await asyncpg.create_pool(
+                self._dsn, min_size=2, max_size=10,
+            )
+            await self._create_tables()
+            self._flush_task = asyncio.create_task(self._auto_flush())
+            logger.info("PostgreSQL 스토리지 초기화 완료")
+        except ImportError:
+            raise RuntimeError("asyncpg 미설치. pip install asyncpg")
+
+    async def _create_tables(self) -> None:
+        async with self._pool.acquire() as conn:
+            await conn.execute("""
+                CREATE TABLE IF NOT EXISTS ticks (
+                    id     BIGSERIAL PRIMARY KEY,
+                    symbol TEXT   NOT NULL,
+                    ts     DOUBLE PRECISION NOT NULL,
+                    price  DOUBLE PRECISION NOT NULL,
+                    size   DOUBLE PRECISION NOT NULL,
+                    side   TEXT NOT NULL
+                );
+                CREATE INDEX IF NOT EXISTS idx_pg_ticks ON ticks(symbol, ts DESC);
+
+                CREATE TABLE IF NOT EXISTS candles (
+                    id        BIGSERIAL PRIMARY KEY,
+                    symbol    TEXT NOT NULL,
+                    timeframe TEXT NOT NULL,
+                    ts        DOUBLE PRECISION NOT NULL,
+                    open      DOUBLE PRECISION NOT NULL,
+                    high      DOUBLE PRECISION NOT NULL,
+                    low       DOUBLE PRECISION NOT NULL,
+                    close     DOUBLE PRECISION NOT NULL,
+                    volume    DOUBLE PRECISION NOT NULL,
+                    UNIQUE(symbol, timeframe, ts)
+                );
+                CREATE INDEX IF NOT EXISTS idx_pg_candles ON candles(symbol, timeframe, ts DESC);
+
+                CREATE TABLE IF NOT EXISTS strategy_signals (
+                    id        BIGSERIAL PRIMARY KEY,
+                    symbol    TEXT NOT NULL,
+                    ts        DOUBLE PRECISION NOT NULL,
+                    direction TEXT NOT NULL,
+                    score     DOUBLE PRECISION NOT NULL,
+                    entry     DOUBLE PRECISION NOT NULL,
+                    sl        DOUBLE PRECISION NOT NULL,
+                    tp        DOUBLE PRECISION NOT NULL,
+                    rr        DOUBLE PRECISION NOT NULL,
+                    reasons   TEXT
+                );
+            """)
+
+    def add_tick(self, tick) -> None:
+        self._tick_buffer.append(
+            (tick.symbol, tick.ts, tick.price, tick.size, tick.side.value)
+        )
+
+    def add_candle(self, candle) -> None:
+        self._candle_buffer.append((
+            candle.symbol, candle.timeframe.value, candle.ts,
+            candle.open, candle.high, candle.low, candle.close, candle.volume,
+        ))
+
+    async def _auto_flush(self) -> None:
+        while True:
+            await asyncio.sleep(FLUSH_INTERVAL)
+            await self.flush()
+
+    async def flush(self) -> None:
+        if not self._pool:
+            return
+        try:
+            async with self._pool.acquire() as conn:
+                if self._tick_buffer:
+                    batch = [self._tick_buffer.popleft()
+                             for _ in range(min(BATCH_SIZE, len(self._tick_buffer)))]
+                    await conn.executemany(
+                        "INSERT INTO ticks(symbol,ts,price,size,side) VALUES($1,$2,$3,$4,$5)",
+                        batch,
+                    )
+                if self._candle_buffer:
+                    batch = [self._candle_buffer.popleft()
+                             for _ in range(min(BATCH_SIZE, len(self._candle_buffer)))]
+                    await conn.executemany(
+                        """INSERT INTO candles(symbol,timeframe,ts,open,high,low,close,volume)
+                           VALUES($1,$2,$3,$4,$5,$6,$7,$8)
+                           ON CONFLICT(symbol,timeframe,ts) DO NOTHING""",
+                        batch,
+                    )
+        except Exception as e:
+            logger.error(f"PostgreSQL flush 오류: {e}")
+
+    async def get_candles(self, symbol: str, timeframe, limit: int = 1000) -> pl.DataFrame:
+        if not self._pool:
+            return pl.DataFrame()
+        async with self._pool.acquire() as conn:
+            rows = await conn.fetch(
+                """SELECT ts,open,high,low,close,volume FROM candles
+                   WHERE symbol=$1 AND timeframe=$2
+                   ORDER BY ts DESC LIMIT $3""",
+                symbol, timeframe.value, limit,
+            )
+        if not rows:
+            return pl.DataFrame()
+        return pl.DataFrame({
+            "ts":     [r["ts"]     for r in rows],
+            "open":   [r["open"]   for r in rows],
+            "high":   [r["high"]   for r in rows],
+            "low":    [r["low"]    for r in rows],
+            "close":  [r["close"]  for r in rows],
+            "volume": [r["volume"] for r in rows],
+        }).sort("ts")
+
+    async def close(self) -> None:
+        if self._flush_task:
+            self._flush_task.cancel()
+        await self.flush()
+        if self._pool:
+            await self._pool.close()
