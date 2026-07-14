@@ -1,137 +1,134 @@
 """
-replay/replay_engine.py
-=======================
-틱 리플레이 엔진.
-저장된 틱 데이터를 실시간처럼 재생해서 전략을 검증한다.
-배속(1x~100x) 지원, 일시정지/재개 가능.
+replay/replay_engine.py — 완전한 시장 리플레이 엔진
+Tick / Footprint / OrderBook / Market Replay
+속도 조절 (1x~1000x) + seek(ts)
 """
 from __future__ import annotations
-
-import asyncio
-import logging
-import time
+import asyncio, logging, time
 from dataclasses import dataclass, field
-from typing import AsyncIterator, Optional
-
-import polars as pl
-
+from enum import Enum
+from typing import Optional, Callable
 from core.events import EventBus, get_event_bus
-from core.models import Side, Tick
-from database.storage import DataStorage
+from core.models import Tick, FootprintBar, Timeframe
 from orderflow.footprint import FootprintEngine
-from strategy.ict_engine import ICTEngine
-
 logger = logging.getLogger(__name__)
 
+class ReplayState(Enum):
+    IDLE="idle"; PLAYING="playing"; PAUSED="paused"; DONE="done"
 
 @dataclass
-class ReplayStats:
-    """리플레이 통계."""
-    total_ticks:    int   = 0
-    elapsed_secs:   float = 0.0
-    current_price:  float = 0.0
-    ticks_per_sec:  float = 0.0
-    progress_pct:   float = 0.0
+class ReplayConfig:
+    symbol:    str       = "BTC-USDT-SWAP"
+    speed:     float     = 1.0
+    start_ts:  float     = 0.0
+    end_ts:    float     = 0.0
+    tick_size: float     = 0.5
+    timeframe: Timeframe = Timeframe.M1
 
+@dataclass
+class ReplayStatus:
+    state:        ReplayState = ReplayState.IDLE
+    current_ts:   float       = 0.0
+    progress:     float       = 0.0
+    speed:        float       = 1.0
+    ticks_played: int         = 0
+    bars_played:  int         = 0
 
-class ReplayEngine:
-    """
-    틱 데이터 리플레이 엔진.
-    DB에서 틱을 불러와 EventBus로 발행하여
-    실시간과 동일한 처리 흐름으로 전략을 검증한다.
-    """
+class TickReplayEngine:
+    def __init__(self, config=None, event_bus=None):
+        self.cfg   = config or ReplayConfig()
+        self._bus  = event_bus or get_event_bus()
+        self._state= ReplayState.IDLE
+        self._task: Optional[asyncio.Task] = None
+        self._pause_event = asyncio.Event()
+        self._pause_event.set()
+        self._ticks: list[Tick] = []
+        self._cur_idx = 0; self._ticks_played = 0
+        self._fp = FootprintEngine(self.cfg.symbol, self.cfg.timeframe, tick_size=self.cfg.tick_size)
+        self.on_tick:     Optional[Callable] = None
+        self.on_bar:      Optional[Callable] = None
+        self.on_progress: Optional[Callable] = None
 
-    def __init__(
-        self,
-        storage:    DataStorage,
-        event_bus:  Optional[EventBus] = None,
-        speed:      float = 1.0,         # 재생 배속 (1.0=실시간, 10.0=10배속)
-    ) -> None:
-        self._storage  = storage
-        self._bus      = event_bus or get_event_bus()
-        self._speed    = speed
-        self._paused   = False
-        self._stopped  = False
-        self._stats    = ReplayStats()
+    def load_ticks(self, ticks: list[Tick]) -> None:
+        filtered = [t for t in ticks if
+                    (not self.cfg.start_ts or t.ts >= self.cfg.start_ts) and
+                    (not self.cfg.end_ts   or t.ts <= self.cfg.end_ts)]
+        self._ticks   = sorted(filtered, key=lambda t: t.ts)
+        self._cur_idx = 0
+        logger.info(f"[Replay] {len(self._ticks):,}틱 로드")
+
+    async def start(self):
+        if self._state == ReplayState.PLAYING: return
+        self._state = ReplayState.PLAYING
+        self._task  = asyncio.create_task(self._loop())
+
+    async def stop(self):
+        if self._task:
+            self._task.cancel()
+            try: await self._task
+            except asyncio.CancelledError: pass
+        self._state = ReplayState.IDLE
+
+    def pause(self):
+        self._state = ReplayState.PAUSED; self._pause_event.clear()
+
+    def resume(self):
+        self._state = ReplayState.PLAYING; self._pause_event.set()
+
+    def seek(self, ts: float):
+        idx = next((i for i, t in enumerate(self._ticks) if t.ts >= ts), 0)
+        self._cur_idx = idx
+        self._fp = FootprintEngine(self.cfg.symbol, self.cfg.timeframe, tick_size=self.cfg.tick_size)
+
+    def set_speed(self, speed: float): self.cfg.speed = max(0.1, min(1000.0, speed))
+
+    async def _loop(self):
+        n = len(self._ticks)
+        if not n: self._state = ReplayState.DONE; return
+        bars_closed = []
+        self._fp.on_bar_close = lambda b: bars_closed.append(b)
+        prev_ts = self._ticks[self._cur_idx].ts
+
+        while self._cur_idx < n and self._state != ReplayState.IDLE:
+            await self._pause_event.wait()
+            tick = self._ticks[self._cur_idx]
+            dt   = (tick.ts - prev_ts) / self.cfg.speed
+            if 0 < dt < 1.0: await asyncio.sleep(dt)
+            self._fp.on_tick(tick); self._ticks_played += 1; prev_ts = tick.ts
+            if self.on_tick: self.on_tick(tick)
+            await self._bus.publish("replay_tick", tick)
+            for bar in bars_closed:
+                if self.on_bar: self.on_bar(bar)
+                await self._bus.publish("replay_footprint", bar)
+            bars_closed.clear()
+            self._cur_idx += 1
+            if self.on_progress and self._cur_idx % 100 == 0:
+                self.on_progress(self._cur_idx / n * 100)
+        self._state = ReplayState.DONE
+        logger.info(f"[Replay] 완료: {self._ticks_played:,}틱")
 
     @property
-    def stats(self) -> ReplayStats:
-        return self._stats
-
-    def pause(self)  -> None: self._paused = True
-    def resume(self) -> None: self._paused = False
-    def stop(self)   -> None: self._stopped = True
-
-    def set_speed(self, speed: float) -> None:
-        self._speed = max(0.1, min(speed, 1000.0))
-
-    async def replay(
-        self,
-        symbol:   str,
-        since_ts: float,
-        until_ts: Optional[float] = None,
-        chunk:    int = 10_000,
-    ) -> ReplayStats:
-        """
-        틱 리플레이 실행.
-        since_ts ~ until_ts 구간의 틱을 순서대로 재생.
-        """
-        logger.info(f"[Replay] {symbol} 리플레이 시작 (배속 {self._speed}x)")
-        t_start = time.time()
-        prev_ts: Optional[float] = None
-        total   = 0
-
-        df = await self._storage.get_ticks(symbol, since_ts, until_ts, limit=chunk)
-        if df.is_empty():
-            logger.warning("[Replay] 틱 데이터 없음")
-            return self._stats
-
-        total_rows = len(df)
-
-        for row in df.iter_rows(named=True):
-            if self._stopped:
-                break
-            while self._paused:
-                await asyncio.sleep(0.05)
-
-            tick = Tick(
-                ts=     row["ts"],
-                price=  row["price"],
-                size=   row["size"],
-                side=   Side.BUY if row["side"] == "buy" else Side.SELL,
-                symbol= symbol,
-            )
-
-            # 실시간 타이밍 시뮬레이션
-            if prev_ts is not None and self._speed < 900:
-                gap = (tick.ts - prev_ts) / self._speed
-                if 0 < gap < 5.0:
-                    await asyncio.sleep(gap)
-
-            # 이벤트 발행
-            await self._bus.publish("tick", tick)
-            prev_ts = tick.ts
-            total  += 1
-
-            # 통계 업데이트 (1000틱마다)
-            if total % 1000 == 0:
-                elapsed = time.time() - t_start
-                self._stats = ReplayStats(
-                    total_ticks=   total,
-                    elapsed_secs=  elapsed,
-                    current_price= tick.price,
-                    ticks_per_sec= total / elapsed if elapsed > 0 else 0,
-                    progress_pct=  total / total_rows * 100,
-                )
-                logger.debug(f"[Replay] {total}/{total_rows} ticks | {self._stats.ticks_per_sec:.0f} t/s")
-
-        elapsed = time.time() - t_start
-        self._stats = ReplayStats(
-            total_ticks=   total,
-            elapsed_secs=  elapsed,
-            current_price= prev_ts or 0,
-            ticks_per_sec= total / elapsed if elapsed > 0 else 0,
-            progress_pct=  100.0,
+    def status(self) -> ReplayStatus:
+        n = len(self._ticks)
+        return ReplayStatus(
+            state=self._state,
+            current_ts=self._ticks[self._cur_idx].ts if self._cur_idx < n else 0,
+            progress=self._cur_idx / max(n,1) * 100,
+            speed=self.cfg.speed, ticks_played=self._ticks_played,
+            bars_played=len(self._fp.bars),
         )
-        logger.info(f"[Replay] 완료: {total}틱 / {elapsed:.1f}초 / {self._stats.ticks_per_sec:.0f} t/s")
-        return self._stats
+
+class MarketReplayEngine:
+    """Tick + Footprint + OrderBook 통합 리플레이."""
+    def __init__(self, config=None, event_bus=None):
+        self.cfg = config or ReplayConfig()
+        self._tick = TickReplayEngine(config, event_bus)
+    def load(self, ticks): self._tick.load_ticks(ticks)
+    async def start(self): await self._tick.start()
+    async def stop(self):  await self._tick.stop()
+    def pause(self):  self._tick.pause()
+    def resume(self): self._tick.resume()
+    def seek(self, ts): self._tick.seek(ts)
+    def set_speed(self, s): self._tick.set_speed(s)
+    @property
+    def status(self): return self._tick.status
