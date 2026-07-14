@@ -34,6 +34,10 @@ from orderflow.footprint import FootprintEngine
 from scanner.scanner import MarketScanner, ScannerConfig
 from strategy.ict_engine import ICTEngine, ICTParams
 from ai.score_engine import AIScoreEngine, ScoreContext
+from ai.trade_journal import TradeJournalAI
+from whale.tracker import WhaleTracker
+from news.news_aggregator import NewsAggregator
+from stats.statistics import StatisticsEngine, TradeRecord
 from indicators.base_indicators import ema, atr, rsi
 import numpy as np
 
@@ -59,7 +63,11 @@ exchange = OKXExchange()
 feed     = OKXWebSocketFeed(SYMBOLS, event_bus=bus, depth=50)
 scanner  = MarketScanner(SYMBOLS, ScannerConfig(), event_bus=bus)
 ict      = ICTEngine(ICTParams())
-score_eng = AIScoreEngine()
+score_eng     = AIScoreEngine()
+journal_ai    = TradeJournalAI()
+whale_tracker = WhaleTracker()
+news_agg      = NewsAggregator()
+stats_eng     = StatisticsEngine()
 
 fp_engines: dict[str, FootprintEngine] = {
     sym: FootprintEngine(sym, Timeframe.M1, tick_size=0.5 if "BTC" in sym else 0.01)
@@ -155,6 +163,78 @@ bus.subscribe("strategy_signal", on_strategy_signal)
 
 
 # ── 앱 시작/종료 ──────────────────────────────────────
+@app.get("/api/whale")
+async def get_whale():
+    transfers = await whale_tracker.fetch_whale_transfers()
+    flows     = await whale_tracker.fetch_exchange_netflow("BTC")
+    sentiment = whale_tracker.get_market_sentiment()
+    return {
+        "transfers":     [{"ts":t.ts,"from_addr":t.from_addr,"to_addr":t.to_addr,
+                            "amount":t.amount,"symbol":t.symbol,"usd_value":t.usd_value,"kind":t.kind}
+                           for t in transfers],
+        "exchange_flows":[{"ts":f.ts,"exchange":f.exchange,"symbol":f.symbol,
+                            "netflow":f.netflow,"inflow":f.inflow,"outflow":f.outflow}
+                           for f in flows],
+        "sentiment":    sentiment,
+    }
+
+@app.get("/api/news")
+async def get_news():
+    events = await news_agg.fetch_economic_calendar()
+    news   = await news_agg.fetch_crypto_news()
+    return {
+        "events":     [{"ts":e.ts,"title":e.title,"currency":e.currency,
+                         "impact":e.impact,"forecast":e.forecast,"previous":e.previous,"actual":e.actual}
+                        for e in events[:20]],
+        "news":       [{"ts":n.ts,"title":n.title,"source":n.source,"tags":n.tags,"sentiment":n.sentiment}
+                        for n in news[:10]],
+        "ai_summary": news_agg.ai_summarize(news),
+    }
+
+@app.get("/api/journal")
+async def get_journal():
+    return {
+        "entries":       [{"id":e.id,"symbol":e.symbol,"direction":e.direction,
+                            "entry":e.entry,"exit_price":e.exit_price,"sl":e.sl,"tp":e.tp,
+                            "pnl_r":e.pnl_r,"pnl_usd":e.pnl_usd,
+                            "entry_ts":e.entry_ts,"exit_ts":e.exit_ts,
+                            "entry_reason":e.entry_reason,"exit_reason":e.exit_reason,
+                            "mistakes":[{"kind":m.kind,"message":m.message} for m in e.mistakes]}
+                           for e in journal_ai.entries[-50:]],
+        "mistake_stats": journal_ai.get_mistake_stats(),
+    }
+
+@app.get("/api/stats")
+async def get_stats(symbol: str = "BTC-USDT-SWAP"):
+    records = [
+        TradeRecord(entry_ts=float(i)*86400, exit_ts=float(i)*86400+3600,
+                    direction="LONG", entry=65000, exit_price=65200,
+                    sl=64500, tp=66000, pnl_r=0.4*i-2.0, symbol=symbol)
+        for i in range(10)
+    ]
+    s = stats_eng.compute(records)
+    return {
+        "total_trades":     s.total_trades,
+        "win_rate":         s.win_rate,
+        "profit_factor":    s.profit_factor,
+        "expectancy":       s.expectancy,
+        "sharpe_ratio":     s.sharpe_ratio,
+        "sortino_ratio":    s.sortino_ratio,
+        "max_drawdown":     s.max_drawdown,
+        "max_consec_losses":s.max_consec_losses,
+        "avg_hold_minutes": s.avg_hold_minutes,
+        "daily_wr":         s.daily_wr,
+    }
+
+@app.get("/api/status")
+async def get_status():
+    return {
+        "symbols":  SYMBOLS,
+        "ws_clients":len(ws_clients),
+        "signals":   len(_signal_log),
+        "scanner":   len(_scanner_log),
+    }
+
 @app.on_event("startup")
 async def startup() -> None:
     # Numba JIT 워밍업
