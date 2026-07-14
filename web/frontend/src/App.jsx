@@ -8,12 +8,14 @@ import { Scanner, TimeSales, SignalLog } from './components/Panels'
 import Backtest from './components/Backtest'
 import FootprintChart from './components/FootprintChart'
 import { StatsPanel, WhalePanel, NewsPanel, JournalPanel } from './components/Dashboard'
+import AISummary from './components/AISummary'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
   ['footprint',  '📊 Footprint'],
   ['stats',      '📈 통계'],
   ['journal',    '📋 일지'],
+  ['ai',         '🤖 AI 요약'],
 ]
 const RIGHT_TABS = [
   ['orderbook',  '호가창'],
@@ -57,6 +59,7 @@ export default function App() {
               {bottomTab === 'footprint' && <FootprintChart />}
               {bottomTab === 'stats'     && <StatsPanel />}
               {bottomTab === 'journal'   && <JournalPanel />}
+              {bottomTab === 'ai'        && <AISummary />}
             </div>
           </div>
         </div>

@@ -68,6 +68,8 @@ journal_ai    = TradeJournalAI()
 whale_tracker = WhaleTracker()
 news_agg      = NewsAggregator()
 stats_eng     = StatisticsEngine()
+from ai.chart_summary import AIChartSummaryEngine
+chart_summary_engine = AIChartSummaryEngine()
 
 fp_engines: dict[str, FootprintEngine] = {
     sym: FootprintEngine(sym, Timeframe.M1, tick_size=0.5 if "BTC" in sym else 0.01)
@@ -225,6 +227,35 @@ async def get_stats(symbol: str = "BTC-USDT-SWAP"):
         "avg_hold_minutes": s.avg_hold_minutes,
         "daily_wr":         s.daily_wr,
     }
+
+@app.get("/api/chart-summary")
+async def get_chart_summary(symbol: str = "BTC-USDT-SWAP"):
+    try:
+        candles = _candle_cache.get(symbol, [])
+        if not candles:
+            candles = await exchange.get_candles(symbol, Timeframe.M15, 200)
+        from strategy.ict_engine import ICTEngine, ICTParams
+        from strategy.smc_engine import SMCEngine
+        ict_r = ICTEngine(ICTParams()).analyze(candles)
+        smc_r = SMCEngine().analyze(candles)
+        fp    = fp_engines.get(symbol)
+        summary = chart_summary_engine.summarize(
+            symbol=symbol, candles=candles,
+            ict_result=ict_r, smc_result=smc_r,
+            fp_bar=fp.current_bar if fp else None,
+        )
+        return {
+            "headline":   summary.headline,
+            "trend":      summary.trend,
+            "structure":  summary.structure,
+            "orderflow":  summary.orderflow,
+            "key_levels": summary.key_levels,
+            "risk":       summary.risk,
+            "watchfor":   summary.watchfor,
+            "full_text":  summary.full_text,
+        }
+    except Exception as e:
+        return {"error": str(e), "headline": "분석 실패", "full_text": ""}
 
 @app.get("/api/status")
 async def get_status():
