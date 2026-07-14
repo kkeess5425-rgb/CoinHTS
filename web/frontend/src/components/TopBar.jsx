@@ -1,6 +1,6 @@
 import useStore from '../store/useStore'
 
-export default function TopBar() {
+export default function TopBar({ onBacktest }) {
   const {
     connected, activeSymbol, setActiveSymbol, symbols,
     prices, oi, funding,
@@ -76,6 +76,13 @@ export default function TopBar() {
         ))}
       </div>
 
+      {/* 백테스트 버튼 */}
+      <button
+        onClick={onBacktest}
+        className="px-2.5 py-0.5 text-xs bg-[#21262d] hover:bg-[#30363d] text-[#c9d1d9] border border-[#30363d] rounded transition-colors"
+      >
+        📊 백테스트
+      </button>
       {/* 연결 상태 */}
       <div className={`flex items-center gap-1 text-xs shrink-0 ${connected ? 'text-[#3fb950]' : 'text-[#f85149]'}`}>
         <span className="w-1.5 h-1.5 rounded-full" style={{ background: connected ? '#3fb950' : '#f85149' }} />
