@@ -283,6 +283,71 @@ async def set_breakeven(pos_id: str):
     """브레이크이븐 SL 이동."""
     return {"success": True, "pos_id": pos_id}
 
+@app.post("/api/backtest/grid-search")
+async def backtest_grid_search(
+    symbol:    str = Query("BTC-USDT-SWAP"),
+    timeframe: str = Query("15m"),
+    limit:     int = Query(300),
+):
+    """멀티프로세스 그리드서치 백테스트."""
+    from core.performance import ParallelBacktester
+    from strategy.ict_engine import ICTParams
+    tf_map = {"1m":Timeframe.M1,"15m":Timeframe.M15,"1H":Timeframe.H1}
+    tf = tf_map.get(timeframe, Timeframe.M15)
+    try:
+        candles = await exchange.get_candles(symbol, tf, limit)
+    except Exception as e:
+        return {"error": str(e)}
+    if len(candles) < 100:
+        return {"error": f"데이터 부족: {len(candles)}봉"}
+
+    param_grid = ParallelBacktester.build_param_grid({
+        "risk_reward_ratio": [1.5, 2.0, 2.5],
+        "min_confluence":    [0, 1, 2],
+        "require_displacement": [False, True],
+    })
+    backtester = ParallelBacktester(max_workers=2)
+    results    = await backtester.run_grid_search(
+        candles, [{"min_rr": p["risk_reward_ratio"],
+                   "min_confluence": p["min_confluence"],
+                   "require_displacement": p["require_displacement"]}
+                  for p in param_grid],
+    )
+    return {
+        "symbol":    symbol,
+        "timeframe": timeframe,
+        "total_combos": len(results),
+        "best":      results[0] if results else None,
+        "top5":      results[:5],
+    }
+
+@app.post("/api/ai/gpt-analysis")
+async def gpt_analysis(
+    symbol:    str   = Query("BTC-USDT-SWAP"),
+    direction: str   = Query("LONG"),
+    score:     float = Query(70.0),
+):
+    """GPT 시장 분석 (API 키 필요)."""
+    from ai.gpt_integration import GPTIntegration
+    from ai.chart_summary import AIChartSummaryEngine
+    gpt = GPTIntegration()
+    if not gpt.available:
+        return {"available": False, "message": "OPENAI_API_KEY 환경변수를 설정하세요"}
+    try:
+        candles = _candle_cache.get(symbol, [])
+        summary = AIChartSummaryEngine().summarize(symbol, candles)
+        result  = await gpt.analyze_market(symbol, summary.full_text, direction, score)
+        return {
+            "available":    True,
+            "narrative":    result.narrative,
+            "entry_eval":   result.entry_eval,
+            "risk_summary": result.risk_summary,
+            "model":        result.model,
+            "tokens_used":  result.tokens_used,
+        }
+    except Exception as e:
+        return {"available": True, "error": str(e)}
+
 @app.get("/api/status")
 async def get_status():
     return {

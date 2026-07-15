@@ -96,11 +96,14 @@ class ICTResult:
     reasons:      list[str] = field(default_factory=list)
 
     # 신호
-    signal:       Optional[str] = None   # "LONG" | "SHORT"
+    signal:       Optional[str]   = None   # "LONG" | "SHORT"
     entry:        Optional[float] = None
     sl:           Optional[float] = None
     tp:           Optional[float] = None
+    tp2:          Optional[float] = None   # 2차 목표가 (2×RR)
     rr:           Optional[float] = None
+    last_choch:   Optional[float] = None   # 최근 CHoCH 레벨
+    atr:          Optional[float] = None   # 현재 ATR
 
 
 class ICTEngine:
@@ -136,6 +139,7 @@ class ICTEngine:
 
         atr14   = atr(h, l, c, 14)
         atr_cur = float(atr14[-1])
+        result.atr = atr_cur
         cur_close = float(c[-1])
 
         if atr_cur <= 0:
@@ -161,6 +165,16 @@ class ICTEngine:
         result.displacement = self._detect_displacement(
             result, h, l, c, o, atr_cur, p, n
         )
+        # CHoCH 레벨 저장 (SMC 연동용)
+        ph = pivot_high(h, p.swing_length)
+        pl = pivot_low(l,  p.swing_length)
+        if not result.bull_ms:
+            recent_sh = [h[i] for i in range(n) if not np.isnan(ph[i])]
+            if recent_sh: result.last_choch = float(max(recent_sh[-3:]))
+        else:
+            recent_sl = [l[i] for i in range(n) if not np.isnan(pl[i])]
+            if recent_sl: result.last_choch = float(min(recent_sl[-3:]))
+
         if p.require_displacement and not result.displacement:
             return result
 
@@ -194,6 +208,7 @@ class ICTEngine:
                     result.entry  = cur_close
                     result.sl     = round(sl, 4)
                     result.tp     = round(tp, 4)
+                    result.tp2    = round(cur_close + risk * p.min_rr * 2, 4)
                     result.rr     = round(rr, 2)
 
         elif result.bear_sweep_active and not result.bull_ms:
@@ -207,6 +222,7 @@ class ICTEngine:
                     result.entry  = cur_close
                     result.sl     = round(sl, 4)
                     result.tp     = round(tp, 4)
+                    result.tp2    = round(cur_close - risk * p.min_rr * 2, 4)
                     result.rr     = round(rr, 2)
 
         return result
