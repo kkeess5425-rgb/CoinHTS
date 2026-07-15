@@ -13,6 +13,7 @@ import PositionsPanel from './components/Positions'
 import GridSearch from './components/GridSearch'
 import EquityCurve from './components/EquityCurve'
 import { SystemMonitor, PositionSizer } from './components/Monitor'
+import Settings from './components/Settings'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
@@ -32,6 +33,7 @@ const RIGHT_TABS = [
   ['positions',  '💼 포지션'],
   ['monitor',    '🖥️ 모니터'],
   ['sizer',      '📐 사이저'],
+  ['settings',   '⚙️ 설정'],
 ]
 
 export default function App() {
@@ -97,6 +99,7 @@ export default function App() {
             {rightTab === 'positions'  && <PositionsPanel />}
             {rightTab === 'monitor'    && <SystemMonitor />}
             {rightTab === 'sizer'      && <PositionSizer />}
+            {rightTab === 'settings'   && <Settings />}
           </div>
         </div>
       </div>
