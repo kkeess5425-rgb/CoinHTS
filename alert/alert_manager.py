@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from alert.chart_image import build_chart_image, send_chart_to_telegram, ChartImageConfig
 from typing import Optional
 
 import aiohttp
@@ -138,6 +139,47 @@ class AlertManager:
             return False
         self._sent[key] = now
         return True
+
+    async def send_signal_with_chart(
+        self,
+        signal,
+        candles:    list = None,
+        smc_result  = None,
+    ) -> None:
+        """신호 + 차트 이미지를 Telegram으로 전송."""
+        if not self.telegram_token or not self.telegram_chat_id:
+            return
+
+        # 텍스트 알림 먼저
+        await self.on_strategy_signal(signal)
+
+        # 차트 이미지 생성 및 전송
+        if candles and self._cfg.get("send_chart_image", False):
+            try:
+                image = build_chart_image(
+                    symbol=    signal.symbol,
+                    candles=   candles,
+                    entry=     signal.entry,
+                    sl=        signal.sl,
+                    tp=        signal.tp,
+                    tp2=       getattr(signal, "tp2", None),
+                    direction= signal.direction,
+                    score=     signal.score,
+                    smc_result=smc_result,
+                )
+                if image:
+                    caption = (
+                        f"*{signal.symbol}* {signal.direction} 신호\n"
+                        f"점수: {signal.score:.0f}/100\n"
+                        f"진입: {signal.entry:.0f} | SL: {signal.sl:.0f} | TP: {signal.tp:.0f}"
+                    )
+                    await send_chart_to_telegram(
+                        self.telegram_token, self.telegram_chat_id,
+                        image, caption,
+                    )
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).error(f"차트 이미지 전송 오류: {e}")
 
     async def close(self) -> None:
         if self._session and not self._session.closed:

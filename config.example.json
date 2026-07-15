@@ -1,0 +1,131 @@
+{
+  "_comment": "CoinHTS 설정 파일 예제. config.json으로 복사해서 사용하세요.",
+
+  "exchange": {
+    "api_key":    "${OKX_API_KEY}",
+    "api_secret": "${OKX_API_SECRET}",
+    "passphrase": "${OKX_PASSPHRASE}",
+    "sandbox":    false
+  },
+
+  "default_symbols": [
+    "BTC-USDT-SWAP",
+    "ETH-USDT-SWAP"
+  ],
+
+  "candle_history": 500,
+
+  "alert": {
+    "telegram_token":   "${TELEGRAM_TOKEN}",
+    "telegram_chat_id": "${TELEGRAM_CHAT_ID}",
+    "discord_webhook":  "${DISCORD_WEBHOOK}",
+    "min_score":        70.0,
+    "cooldown_seconds": 900,
+    "send_chart_image": true
+  },
+
+  "strategy": {
+    "ict": {
+      "swing_length":          10,
+      "fvg_min_pct":           0.07,
+      "fvg_max_fill":          0.5,
+      "sweep_window":          10,
+      "require_displacement":  true,
+      "min_confluence":        1,
+      "min_risk_pct":          0.07,
+      "min_rr":                2.0,
+      "sl_buffer_atr":         0.3
+    },
+    "smc": {
+      "swing_length":   10,
+      "ob_lookback":    20,
+      "sweep_lookback": 30,
+      "sweep_atr_mult": 0.2
+    },
+    "mtf": {
+      "htf": "4H",
+      "mtf": "1H",
+      "ltf": "15m",
+      "require_htf_alignment": true
+    }
+  },
+
+  "trading": {
+    "mode":                "paper",
+    "account_size":        10000.0,
+    "risk_per_trade":      1.0,
+    "max_open_positions":  3,
+    "max_daily_loss_pct":  3.0,
+    "min_score":           70.0,
+    "partial_tp_enabled":  true,
+    "partial_tp_pct":      0.5,
+    "partial_tp_r":        1.0,
+    "breakeven_enabled":   true,
+    "breakeven_r":         1.0,
+    "trailing_enabled":    true,
+    "trailing_atr_mult":   2.0
+  },
+
+  "position_sizing": {
+    "method":          "atr",
+    "target_atr_risk": 1.0,
+    "kelly_fraction":  0.25,
+    "max_size_pct":    10.0
+  },
+
+  "database": {
+    "sqlite_path":   "data/coinhts.db",
+    "postgres_url":  "",
+    "batch_interval": 2.0,
+    "batch_size":    500
+  },
+
+  "ui": {
+    "theme":          "dark",
+    "candles_limit":  300,
+    "fps":            60,
+    "default_tf":     "15m",
+    "show_smc":       true,
+    "show_footprint": true
+  },
+
+  "scanner": {
+    "volume_spike_mult":   3.0,
+    "oi_surge_pct":        2.0,
+    "funding_extreme":     0.001,
+    "cooldown_seconds":    300,
+    "cvd_window":          20
+  },
+
+  "whale": {
+    "threshold_usd":    1000000,
+    "whale_alert_key":  "",
+    "coinglass_key":    ""
+  },
+
+  "gpt": {
+    "api_key": "${OPENAI_API_KEY}",
+    "model":   "gpt-4o-mini"
+  },
+
+  "voice": {
+    "enabled":  false,
+    "language": "ko",
+    "min_score": 70.0
+  },
+
+  "plugins": {
+    "plugin_dir": "plugins/user",
+    "enabled":    true
+  },
+
+  "performance": {
+    "redis_url":    "",
+    "max_workers":  4,
+    "batch_size":   1000
+  },
+
+  "telegram_bot": {
+    "allowed_chat_ids": []
+  }
+}

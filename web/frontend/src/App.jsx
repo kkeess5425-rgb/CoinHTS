@@ -12,6 +12,7 @@ import AISummary from './components/AISummary'
 import PositionsPanel from './components/Positions'
 import GridSearch from './components/GridSearch'
 import EquityCurve from './components/EquityCurve'
+import { SystemMonitor, PositionSizer } from './components/Monitor'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
@@ -29,6 +30,8 @@ const RIGHT_TABS = [
   ['whale',      '🐋 고래'],
   ['news',       '📰 뉴스'],
   ['positions',  '💼 포지션'],
+  ['monitor',    '🖥️ 모니터'],
+  ['sizer',      '📐 사이저'],
 ]
 
 export default function App() {
@@ -92,6 +95,8 @@ export default function App() {
             {rightTab === 'whale'     && <WhalePanel />}
             {rightTab === 'news'      && <NewsPanel />}
             {rightTab === 'positions'  && <PositionsPanel />}
+            {rightTab === 'monitor'    && <SystemMonitor />}
+            {rightTab === 'sizer'      && <PositionSizer />}
           </div>
         </div>
       </div>

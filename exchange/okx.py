@@ -27,6 +27,9 @@ RATE_LIMIT_DELAY = 0.05   # 초 (20req/s 제한)
 
 
 class OKXExchange(BaseExchange):
+    _min_interval = 0.05   # 최소 요청 간격 (초)
+    _rate_limit   = 20     # 분당 최대 요청 수
+
     """OKX 거래소 REST API 클라이언트."""
 
     def __init__(

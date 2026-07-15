@@ -56,6 +56,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+from core.monitor import SystemMonitor
+monitor = SystemMonitor()
+
 # ── 전역 상태 ─────────────────────────────────────────
 SYMBOLS = config.default_symbols or ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
 
@@ -389,6 +392,52 @@ async def export_stats():
     stats_json = exporter.export_stats_json(stats_eng.compute(records))
     return Response(content=stats_json, media_type="application/json")
 
+@app.get("/api/monitor")
+async def get_monitor():
+    """시스템 성능 모니터 데이터."""
+    latest = monitor.latest
+    stats  = monitor.stats
+    return {
+        "latest": {
+            "cpu_pct":       latest.cpu_pct       if latest else 0,
+            "mem_pct":       latest.mem_pct       if latest else 0,
+            "mem_used_mb":   latest.mem_used_mb   if latest else 0,
+            "ticks_per_sec": latest.ticks_per_sec if latest else 0,
+            "ws_latency_ms": latest.ws_latency_ms if latest else 0,
+            "active_tasks":  latest.active_tasks  if latest else 0,
+        } if latest else {},
+        "stats": {
+            "avg_cpu":     stats.avg_cpu,
+            "max_cpu":     stats.max_cpu,
+            "avg_mem":     stats.avg_mem,
+            "avg_tps":     stats.avg_tps,
+            "peak_tps":    stats.peak_tps,
+            "avg_latency": stats.avg_latency,
+            "uptime_sec":  stats.uptime_sec,
+            "total_ticks": stats.total_ticks,
+            "error_count": stats.error_count,
+        },
+        "history": monitor.get_history_dict(60),
+        "summary":  monitor.summary(),
+    }
+
+@app.get("/api/position-size")
+async def calc_position_size(
+    entry:   float = Query(65000.0),
+    sl:      float = Query(64500.0),
+    atr:     Optional[float] = Query(None),
+    method:  str   = Query("atr"),
+    account: float = Query(10000.0),
+    risk_pct:float = Query(1.0),
+):
+    """포지션 사이징 계산."""
+    from risk.position_sizer import PositionSizer, SizingConfig
+    sizer  = PositionSizer(SizingConfig(
+        method=method, account_size=account, risk_pct=risk_pct
+    ))
+    result = sizer.recommend(entry=entry, sl=sl, atr=atr)
+    return result
+
 @app.get("/api/status")
 async def get_status():
     return {
@@ -423,6 +472,7 @@ async def startup() -> None:
 
     # OI/펀딩 루프
     asyncio.create_task(_market_data_loop())
+    asyncio.create_task(monitor.start())
     logger.info("CoinHTS Web 서버 시작됨")
 
 
