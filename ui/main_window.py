@@ -32,6 +32,12 @@ from ui.time_sales import TimeSalesWidget
 from ui.scanner_widget import ScannerWidget
 from ui.footprint_widget import FootprintWidget
 from ui.heatmap_widget import HeatmapWidget
+from ui.smc_widget import SMCControlPanel, SMCOverlay
+from ui.position_widget import PositionWidget
+from ui.ai_summary_widget import AISummaryWidget
+from ui.smc_widget import SMCControlPanel, SMCOverlay
+from ui.position_widget import PositionWidget
+from ui.ai_summary_widget import AISummaryWidget
 
 logger = logging.getLogger(__name__)
 
@@ -383,6 +389,10 @@ class MainWindow(QMainWindow):
         # 히트맵
         self._heatmap = HeatmapWidget()
         self._tabs.addTab(self._heatmap, "🌡 히트맵")
+        # AI 차트 요약
+        self._ai_summary = AISummaryWidget()
+        self._ai_summary.refresh_requested.connect(self._run_ai_summary)
+        self._tabs.addTab(self._ai_summary, "🤖 AI 요약")
         self.setCentralWidget(self._tabs)
 
     def _setup_docks(self) -> None:
@@ -418,6 +428,43 @@ class MainWindow(QMainWindow):
         ts_dock.setWidget(self._time_sales)
         ts_dock.setMinimumWidth(220)
         self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, ts_dock)
+
+        # SMC 패널 (오른쪽)
+        self._smc_panel = SMCControlPanel()
+        self._smc_panel.refresh_requested.connect(self._run_smc_analysis)
+        smc_dock = QDockWidget("🏗 SMC 분석", self)
+        smc_dock.setWidget(self._smc_panel)
+        smc_dock.setMinimumWidth(220)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, smc_dock)
+        self.tabifyDockWidget(book_dock, smc_dock)
+
+        # 포지션 관리 (아래)
+        self._position_widget = PositionWidget()
+        pos_dock = QDockWidget("💼 포지션 관리", self)
+        pos_dock.setWidget(self._position_widget)
+        pos_dock.setMinimumHeight(160)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, pos_dock)
+        self.tabifyDockWidget(sig_dock, pos_dock)
+
+        # SMC 분석 패널 (오른쪽)
+        self._smc_panel = SMCControlPanel()
+        self._smc_panel.refresh_requested.connect(self._run_smc_analysis)
+        smc_dock = QDockWidget("🏗 SMC 분석", self)
+        smc_dock.setWidget(self._smc_panel)
+        smc_dock.setMinimumWidth(220)
+        self.addDockWidget(Qt.DockWidgetArea.RightDockWidgetArea, smc_dock)
+        self.tabifyDockWidget(book_dock, smc_dock)
+
+        # 포지션 관리 (아래)
+        self._position_widget = PositionWidget()
+        pos_dock = QDockWidget("💼 포지션 관리", self)
+        pos_dock.setWidget(self._position_widget)
+        pos_dock.setMinimumHeight(160)
+        self.addDockWidget(Qt.DockWidgetArea.BottomDockWidgetArea, pos_dock)
+        self.tabifyDockWidget(sig_dock, pos_dock)
+
+        # SMC 오버레이 (차트에 연결)
+        self._smc_overlay: SMCOverlay | None = None
 
     def _setup_statusbar(self) -> None:
         bar = QStatusBar()
@@ -462,6 +509,40 @@ class MainWindow(QMainWindow):
             color = "#3fb950" if tick.side.value == "buy" else "#f85149"
             self._price_label.setStyleSheet(f"color: {color};")
             self._price_label.setText(f"{tick.symbol}: {tick.price:.2f}")
+            if hasattr(self, "_position_widget"):
+                self._position_widget.update_price(tick.symbol, tick.price)
+            # 포지션 위젯 가격 업데이트
+            if hasattr(self, '_position_widget'):
+                self._position_widget.update_price(tick.symbol, tick.price)
+
+    def _run_smc_analysis(self) -> None:
+        sym = self._toolbar.current_symbol
+        try:
+            logger.info(f"[UI] SMC 분석 요청: {sym}")
+        except Exception as e:
+            logger.error(f"[UI] SMC 분석 오류: {e}")
+
+    def _run_ai_summary(self) -> None:
+        """AI 차트 요약 실행."""
+        sym = self._toolbar.current_symbol
+        if hasattr(self, '_ai_summary'):
+            self._ai_summary.run_analysis(sym, [], None, None, None)
+            logger.info(f"[UI] AI 요약 요청: {sym}")
+
+    def update_smc_result(self, result, candles=None) -> None:
+        """외부에서 SMC 결과 업데이트 (앱 오케스트레이터 연결용)."""
+        if hasattr(self, '_smc_panel'):
+            self._smc_panel.update_result(result)
+        if hasattr(self, '_smc_overlay') and self._smc_overlay and candles:
+            ts_list = [c.ts for c in candles]
+            x0 = ts_list[0]  if ts_list else 0
+            x1 = ts_list[-1] if ts_list else 0
+            self._smc_overlay.render(result, x0, x1)
+
+    def set_trader(self, trader) -> None:
+        """자동매매 엔진 연결."""
+        if hasattr(self, '_position_widget'):
+            self._position_widget.set_trader(trader)
 
     def _on_orderbook(self, book) -> None:
         if book.symbol == self._toolbar.current_symbol:

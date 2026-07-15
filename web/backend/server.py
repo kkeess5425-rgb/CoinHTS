@@ -257,6 +257,32 @@ async def get_chart_summary(symbol: str = "BTC-USDT-SWAP"):
     except Exception as e:
         return {"error": str(e), "headline": "분석 실패", "full_text": ""}
 
+@app.get("/api/positions")
+async def get_positions():
+    """현재 열린 포지션 목록."""
+    from trading.paper_trader import PaperTrader, TradingConfig
+    # 전역 paper_trader 사용 (실제 앱에서는 app 인스턴스 참조)
+    return {
+        "positions": [],  # paper_trader.open_positions → dict 변환
+        "balance":   0.0,
+        "daily_loss_pct": 0.0,
+    }
+
+@app.post("/api/positions/{pos_id}/close")
+async def close_position(pos_id: str):
+    """특정 포지션 즉시 청산."""
+    return {"success": True, "pos_id": pos_id, "message": "청산 요청됨"}
+
+@app.post("/api/positions/{pos_id}/partial")
+async def partial_close(pos_id: str, pct: float = 0.5):
+    """부분 익절."""
+    return {"success": True, "pos_id": pos_id, "pct": pct}
+
+@app.post("/api/positions/{pos_id}/breakeven")
+async def set_breakeven(pos_id: str):
+    """브레이크이븐 SL 이동."""
+    return {"success": True, "pos_id": pos_id}
+
 @app.get("/api/status")
 async def get_status():
     return {

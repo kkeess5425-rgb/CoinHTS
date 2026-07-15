@@ -240,10 +240,11 @@ class AdvancedScoringEngine:
         parts = []
 
         if ict:
-            ms = "상승" if ict.bull_ms else "하락"
+            ms = "상승" if getattr(ict, "bull_ms", False) else "하락"
             parts.append(f"현재 시장 구조는 {ms} 추세")
-            if ict.last_choch:
-                parts.append(f"최근 CHoCH({ict.last_choch:.0f})에서 추세 전환 감지")
+            last_choch = getattr(ict, "last_choch", None)
+            if last_choch:
+                parts.append(f"최근 CHoCH({last_choch:.0f})에서 추세 전환 감지")
 
         if smc:
             z = smc.premium_discount

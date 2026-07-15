@@ -1,72 +1,98 @@
-# CoinHTS — 전문 코인 HTS
+# CoinHTS — Professional Crypto Trading Terminal
 
-> TradingView + Bookmap + Exocharts를 합친 수준의 Python 기반 암호화폐 트레이딩 터미널
+> TradingView + Bookmap + Exocharts + AI를 합친 수준의 Python 암호화폐 트레이딩 터미널
 
 [![Python](https://img.shields.io/badge/Python-3.13-blue)](https://python.org)
-[![PySide6](https://img.shields.io/badge/PySide6-6.6+-green)](https://doc.qt.io/qtforpython)
-[![Tests](https://img.shields.io/badge/Tests-121%20passed-brightgreen)]()
-[![Performance](https://img.shields.io/badge/Performance-169K%20ticks%2Fsec-orange)]()
+[![Tests](https://img.shields.io/badge/Tests-199%20passed-brightgreen)]()
+[![Files](https://img.shields.io/badge/Files-83%20py%20|%2015K%20lines-orange)]()
+[![License](https://img.shields.io/badge/License-MIT-green)]()
 
 ---
 
-## 기능
+## 핵심 기능
 
-### 📈 차트
-- 1초봉 ~ 4시간봉 전 타임프레임
-- 60FPS (PyQtGraph + OpenGL)
-- 멀티차트 (1×1 / 2×1 / 2×2 / 1+3)
-- 드로잉 도구 (수평선, 추세선, 피보나치, 박스)
-- 줌 / 스크롤
-
-### 📊 오더플로우
+### 📊 차트 & UI
 | 기능 | 설명 |
 |------|------|
-| Footprint | 가격 레벨별 매수/매도 볼륨 (Bookmap 스타일) |
-| Delta / CVD | 실시간 볼륨 델타 및 누적 델타 |
-| Imbalance | 4:1 이상 불균형 하이라이트 |
-| Absorption | 가격 정체 + 큰 볼륨 감지 |
-| Time & Sales | 실시간 체결 내역 + Whale 하이라이트 |
+| 캔들차트 | 60FPS (PyQtGraph + OpenGL), 1초봉~4H |
+| 멀티차트 | 1×1 / 2×1 / 2×2 / 1+3 레이아웃 |
+| 드로잉 도구 | 수평선, 추세선, 피보나치, 박스 |
+| SMC 오버레이 | FVG/OB/Breaker/EQH/EQL/PDZ 차트 위 표시 |
+| AI 요약 패널 | 자연어 시장 분석 (6섹션) |
+| 포지션 패널 | 실시간 PnL, 부분익절/BE/청산 버튼 |
 
-### 📉 오더북
-- 실시간 400단계 호가 (CRC32 체크섬 검증)
-- 유동성 히트맵 (CoinGlass 스타일)
+### 🎯 전략 엔진
 
-### 🔍 스캐너
-- 볼륨 급증 (평균 3배 이상)
-- OI 급증 (2% 이상)
-- 펀딩비 극단값
-- Delta 폭증
-- Absorption 감지
+**ICT (Inner Circle Trader)**
+- BOS / CHoCH / Displacement
+- FVG (Fair Value Gap, 50% 채움 필터)
+- Order Block / OTE (골든포켓 0.618~0.786)
 - Liquidity Sweep
 
-### 🎯 ICT 전략 엔진
-```
-BOS / CHoCH → Liquidity Sweep → Displacement
-    → FVG / Order Block / OTE (골든포켓 0.618~0.786)
-    → AI 100점 스코어링 → 알림
-```
-8단계 필터로 가짜 신호 최소화.
+**SMC (Smart Money Concept)**
+- BOS / CHoCH / FVG / Order Block
+- Breaker Block / Mitigation Block
+- Equal High / Equal Low
+- Premium / Discount Zone
+- SMT Divergence
 
-### 🤖 AI 스코어 (0~100점)
-| 조건 | 배점 |
+### ⚡ 오더플로우
+- Footprint 차트 (Bookmap 수준, 169K ticks/sec)
+- Stacked Imbalance / Unfinished Auction
+- Absorption / Exhaustion
+- Iceberg Detection / Hidden Liquidity
+- Aggressive Buyer/Seller
+- Delta Divergence
+
+### 🤖 AI 분석
+- 진입 점수 (0~100), 청산 점수, 추세 강도, 변동성 점수
+- 신뢰도 (%), 자연어 시장 설명
+- AI 차트 요약: "현재는 상승 추세이며 CVD는 상승하지만 OI는 감소 중..."
+- 매매일지 자동 생성
+- 실수 감지 (추격매수/복수매매/FOMO/RR부족)
+
+### 📈 통계
+- 승률, Profit Factor, Sharpe, Sortino, Expectancy, MDD
+- 시간대별 / 요일별 승률 차트
+- Monte Carlo, Walk Forward, 유전자 알고리즘 최적화
+
+### 🔍 스캐너
+| 신호 | 설명 |
 |------|------|
-| BOS / CHoCH | 20점 |
-| 유동성 스윕 전환 | 15점 |
-| 볼륨 급증 | 15점 |
-| OI 증가 | 10점 |
-| 양성 Delta | 15점 |
-| Footprint 매수 우세 | 15점 |
-| Absorption | 10점 |
-| EMA 추세 | 10점 |
-| 펀딩 과열 (감점) | -5점 |
+| VOLUME_SPIKE | 볼륨 3배 이상 급증 |
+| OI_SURGE | 미결제약정 2% 급증 |
+| CVD_BULL/BEAR_DIV | CVD 다이버전스 |
+| SMC_BOS/CHOCH | 구조 돌파/전환 |
+| SMC_SWEEP | 유동성 스윕 |
+| FP_ABSORPTION | Absorption 신호 |
+| LIQUIDATION_SURGE | 대형 청산 급증 |
 
-**80점+ → BUY, 20점- → SELL**
+### 💰 자동매매
+- 페이퍼 트레이딩 (가상 자금)
+- **실거래** (OKX API, 샌드박스 지원)
+- 부분 익절 (1R 도달 시 50% 익절)
+- 브레이크이븐 자동 이동
+- ATR 트레일링 스탑
+- 일일 최대 손실 제한 (3%)
+- 최대 포지션 수 제한
 
-### ⚠️ Risk Management
-- ATR 기반 손절
-- Trailing Stop
-- 일일 최대 손실 제한
-- Kelly Criterion 포지션 사이즈
+### 🐋 외부 데이터
+- 고래 추적 (대형 이체, 거래소 유입/유출, 스테이블코인)
+- 경제 캘린더 (CPI/FOMC/PPI/NFP)
+- AI 뉴스 요약
+
+### 🤖 Telegram 봇
+```
+/status    — 앱 상태 요약
+/positions — 열린 포지션
+/signals   — 최근 전략 신호
+/scanner   — 스캐너 알림
+/whale     — 고래 트래커
+/news      — 경제 캘린더
+/journal   — 매매일지 요약
+/stop      — 자동매매 중지
+/start_trading — 재개
+```
 
 ---
 
@@ -78,34 +104,57 @@ cd CoinHTS
 pip install -r requirements.txt
 ```
 
-### PostgreSQL 사용 시 (선택)
-```bash
-pip install asyncpg
-```
-
 ---
 
 ## 실행
 
+### 데스크탑 앱
 ```bash
 python main.py
 ```
 
-### 설정 파일 (`config.json`)
-```json
-{
-  "telegram_token":   "YOUR_BOT_TOKEN",
-  "telegram_chat_id": "YOUR_CHAT_ID",
-  "discord_webhook":  "YOUR_WEBHOOK_URL",
-  "default_symbols":  ["BTC-USDT-SWAP", "ETH-USDT-SWAP"]
-}
+### 웹 버전
+```bash
+# 백엔드
+python web/backend/server.py
+
+# 프론트엔드 (별도 터미널)
+cd web/frontend && npm install && npm run dev
+# → http://localhost:5173
 ```
 
-OKX API 키는 환경변수 권장:
+### Docker
 ```bash
-export OKX_API_KEY="your_key"
-export OKX_API_SECRET="your_secret"
-export OKX_PASSPHRASE="your_passphrase"
+cp .env.example .env   # API 키 설정
+docker-compose up -d   # Redis 포함
+# → http://localhost:8000
+```
+
+---
+
+## 환경변수
+
+```bash
+export OKX_API_KEY="..."
+export OKX_API_SECRET="..."
+export OKX_PASSPHRASE="..."
+export TELEGRAM_TOKEN="..."
+export TELEGRAM_CHAT_ID="..."
+export DISCORD_WEBHOOK="..."
+```
+
+---
+
+## 실거래 사용법
+
+```python
+from trading.live_trader import OKXLiveTrader, TradingConfig
+
+trader = OKXLiveTrader(
+    api_key="...", api_secret="...", passphrase="...",
+    config=TradingConfig(risk_per_trade=0.5),  # 잔고의 0.5%
+    sandbox=True,   # ⚠️ 먼저 샌드박스로 테스트!
+)
 ```
 
 ---
@@ -114,49 +163,29 @@ export OKX_PASSPHRASE="your_passphrase"
 
 ```
 CoinHTS/
-├── core/           # 데이터 모델, EventBus, 설정, 오케스트레이터
-├── exchange/       # OKX REST API (Binance/Bybit 추가 가능)
-├── websocket/      # OKX WebSocket 실시간 피드
-├── indicators/     # EMA/ATR/RSI/VWAP/VolumeProfile (Numba JIT)
-├── orderflow/      # Footprint 엔진 (Imbalance/Absorption)
-├── strategy/       # ICT 엔진 (BOS/FVG/OB/OTE/Displacement)
-├── scanner/        # 실시간 멀티 조건 스캐너
-├── database/       # SQLite / PostgreSQL 저장소
-├── replay/         # 틱 리플레이 (1x~1000x)
-├── risk/           # ATR 손절 / Trailing / Kelly
-├── alert/          # Telegram / Discord 알림
-├── ai/             # AI 통합 100점 스코어
-├── ui/             # PySide6 UI 전체
-│   ├── main_window.py       # 메인 윈도우
-│   ├── chart_widget.py      # 고성능 캔들 차트
-│   ├── footprint_widget.py  # Footprint 차트
-│   ├── heatmap_widget.py    # 유동성 히트맵
-│   ├── scanner_widget.py    # 스캐너 패널
-│   ├── time_sales.py        # Time & Sales
-│   ├── drawing_tools.py     # 드로잉 도구
-│   ├── multi_chart.py       # 멀티차트
-│   └── settings_dialog.py   # 설정 다이얼로그
-└── tests/          # 단위 테스트 (121개)
+├── core/           모델, EventBus, 설정, 오케스트레이터, 성능
+├── exchange/       OKX REST API
+├── websocket/      실시간 WebSocket 피드
+├── indicators/     EMA/ATR/RSI/VWAP (Numba JIT)
+├── orderflow/      Footprint + 고급 오더플로우
+├── strategy/       ICT 엔진 + SMC 엔진
+├── orderbook/      DOM 분석 (Spoofing/Whale)
+├── scanner/        기본 + 고급 스캐너
+├── ai/             AI 점수 + 요약 + 매매일지
+├── stats/          통계 엔진
+├── optimization/   Walk Forward / MC / GA
+├── news/           경제 캘린더 + 뉴스
+├── whale/          고래 추적
+├── trading/        페이퍼 + 실거래
+├── replay/         틱/Footprint 리플레이
+├── risk/           리스크 매니저
+├── alert/          Telegram / Discord / 음성 / 봇
+├── plugins/        플러그인 시스템
+├── database/       SQLite / PostgreSQL
+├── ui/             PySide6 데스크탑 UI (11개 위젯)
+├── web/            FastAPI 백엔드 + React 프론트엔드
+└── tests/          199개 단위/통합 테스트
 ```
-
----
-
-## 데이터 흐름
-
-```
-OKX WebSocket
-    ↓ tick (169,000 ticks/sec)
-FootprintEngine  →  EventBus("footprint")
-    ↓ bar_close
-MarketScanner    →  EventBus("scanner_signal")  →  AlertManager
-ICTEngine (15분 주기)
-    ↓
-AIScoreEngine    →  EventBus("strategy_signal") →  AlertManager
-    ↓
-DataStorage (SQLite / PostgreSQL)
-```
-
-모든 모듈은 **EventBus**를 통해 통신 → 직접 참조 없음 → SOLID 준수.
 
 ---
 
@@ -164,44 +193,26 @@ DataStorage (SQLite / PostgreSQL)
 
 | 항목 | 결과 | 목표 |
 |------|------|------|
-| 틱 처리 속도 | **169,000 ticks/sec** | 100,000 |
-| Numba EMA (1000봉) | **< 1ms** | 5ms |
+| Footprint 처리 | **169,000 ticks/sec** | 100K |
+| Numba EMA (1000봉) | **0.023ms** | 5ms |
 | ICT 분석 (200봉) | **< 30ms** | 100ms |
-| UI 렌더링 | **60FPS** (OpenGL) | 60FPS |
-| 단위 테스트 | **121개 통과** | - |
-
----
-
-## 거래소 추가 방법
-
-`exchange/base.py`의 `BaseExchange`를 구현하면 됩니다:
-
-```python
-from exchange.base import BaseExchange
-
-class BinanceExchange(BaseExchange):
-    @property
-    def name(self) -> str:
-        return "Binance"
-
-    async def get_candles(self, symbol, timeframe, limit=300, after=None):
-        # Binance API 구현
-        ...
-```
+| SMC 분석 (300봉) | **< 50ms** | 100ms |
+| 전체 파이프라인 | **> 50K ticks/sec** | 50K |
+| 단위 테스트 | **199/199 통과** | — |
 
 ---
 
 ## 테스트
 
 ```bash
-# 전체 테스트
+# 전체
 python -m pytest tests/ -v
 
-# 성능 벤치마크만
-python -m pytest tests/test_performance.py -v
+# 통합 테스트
+python -m pytest tests/test_integration.py -v
 
-# 특정 모듈
-python -m pytest tests/test_footprint.py -v
+# 성능 벤치마크
+python -m pytest tests/test_performance.py -v
 ```
 
 ---

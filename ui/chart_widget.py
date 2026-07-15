@@ -430,3 +430,20 @@ class MainChartWidget(QWidget):
     def toggle_ema(self, enabled: bool) -> None:
         self.show_ema = enabled
         self._needs_redraw = True
+    def attach_smc_overlay(self, plot_item=None) -> "SMCOverlay":
+        from ui.smc_widget import SMCOverlay
+        target = plot_item or self._plot
+        self._smc_overlay = SMCOverlay(target)
+        return self._smc_overlay
+
+    def render_smc(self, result, candles: list = None) -> None:
+        if not hasattr(self, '_smc_overlay') or not self._smc_overlay:
+            self.attach_smc_overlay()
+        if candles:
+            x0 = candles[0].ts
+            x1 = candles[-1].ts
+        else:
+            r = self._plot.viewRange()
+            x0, x1 = r[0][0], r[0][1]
+        self._smc_overlay.render(result, x0, x1)
+

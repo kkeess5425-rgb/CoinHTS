@@ -9,6 +9,7 @@ import Backtest from './components/Backtest'
 import FootprintChart from './components/FootprintChart'
 import { StatsPanel, WhalePanel, NewsPanel, JournalPanel } from './components/Dashboard'
 import AISummary from './components/AISummary'
+import PositionsPanel from './components/Positions'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
@@ -23,6 +24,7 @@ const RIGHT_TABS = [
   ['timesales',  'T&S'],
   ['whale',      '🐋 고래'],
   ['news',       '📰 뉴스'],
+  ['positions',  '💼 포지션'],
 ]
 
 export default function App() {
@@ -83,6 +85,7 @@ export default function App() {
             {rightTab === 'timesales' && <TimeSales />}
             {rightTab === 'whale'     && <WhalePanel />}
             {rightTab === 'news'      && <NewsPanel />}
+            {rightTab === 'positions'  && <PositionsPanel />}
           </div>
         </div>
       </div>
