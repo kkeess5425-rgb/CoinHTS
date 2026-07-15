@@ -348,6 +348,47 @@ async def gpt_analysis(
     except Exception as e:
         return {"available": True, "error": str(e)}
 
+from fastapi.responses import StreamingResponse, Response
+import io
+
+@app.get("/api/export/trades")
+async def export_trades(fmt: str = "csv"):
+    """트레이드 기록 내보내기 (csv / json)."""
+    from database.exporter import DataExporter
+    from ai.trade_journal import TradeJournalAI
+    exporter = DataExporter()
+    entries  = journal_ai.entries
+
+    if fmt == "json":
+        data = [
+            {"id": e.id, "symbol": e.symbol, "direction": e.direction,
+             "pnl_r": e.pnl_r, "pnl_usd": e.pnl_usd,
+             "entry": e.entry, "exit_price": e.exit_price,
+             "entry_ts": e.entry_ts, "exit_ts": e.exit_ts,
+             "result": e.result}
+            for e in entries
+        ]
+        return data
+
+    csv_str = exporter.export_journal_csv(entries)
+    return StreamingResponse(
+        io.StringIO(csv_str),
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=coinhts_trades.csv"}
+    )
+
+@app.get("/api/export/stats")
+async def export_stats():
+    """통계 JSON 내보내기."""
+    from stats.statistics import StatisticsEngine, TradeRecord
+    from ai.trade_journal import TradeJournalAI
+    from database.exporter import DataExporter
+    exporter = DataExporter()
+    # 예시 데이터
+    records = []
+    stats_json = exporter.export_stats_json(stats_eng.compute(records))
+    return Response(content=stats_json, media_type="application/json")
+
 @app.get("/api/status")
 async def get_status():
     return {

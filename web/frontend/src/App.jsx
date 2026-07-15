@@ -10,6 +10,8 @@ import FootprintChart from './components/FootprintChart'
 import { StatsPanel, WhalePanel, NewsPanel, JournalPanel } from './components/Dashboard'
 import AISummary from './components/AISummary'
 import PositionsPanel from './components/Positions'
+import GridSearch from './components/GridSearch'
+import EquityCurve from './components/EquityCurve'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
@@ -17,6 +19,8 @@ const BOTTOM_TABS = [
   ['stats',      '📈 통계'],
   ['journal',    '📋 일지'],
   ['ai',         '🤖 AI 요약'],
+  ['equity',     '📈 Equity'],
+  ['gridsearch', '⚡ 최적화'],
 ]
 const RIGHT_TABS = [
   ['orderbook',  '호가창'],
@@ -62,6 +66,8 @@ export default function App() {
               {bottomTab === 'stats'     && <StatsPanel />}
               {bottomTab === 'journal'   && <JournalPanel />}
               {bottomTab === 'ai'        && <AISummary />}
+              {bottomTab === 'equity'    && <EquityCurve />}
+              {bottomTab === 'gridsearch'&& <GridSearch />}
             </div>
           </div>
         </div>
