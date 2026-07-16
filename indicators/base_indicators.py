@@ -248,3 +248,104 @@ def detect_stacked_imbalances(
                 bear_stacked[j] = True
 
     return bull_stacked, bear_stacked
+
+# ── 볼린저 밴드 ───────────────────────────────────────
+@nb.njit(cache=True, fastmath=True)
+def bollinger_bands(
+    prices: np.ndarray,
+    period: int   = 20,
+    std_dev: float = 2.0,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """볼린저 밴드 (중간선, 상단, 하단)."""
+    n   = len(prices)
+    mid = np.full(n, np.nan)
+    up  = np.full(n, np.nan)
+    lo  = np.full(n, np.nan)
+    for i in range(period - 1, n):
+        window = prices[i - period + 1 : i + 1]
+        m = window.mean()
+        s = window.std()
+        mid[i] = m
+        up[i]  = m + std_dev * s
+        lo[i]  = m - std_dev * s
+    return mid, up, lo
+
+
+# ── MACD ─────────────────────────────────────────────
+@nb.njit(cache=True, fastmath=True)
+def macd(
+    prices:   np.ndarray,
+    fast:     int = 12,
+    slow:     int = 26,
+    signal:   int = 9,
+) -> tuple[np.ndarray, np.ndarray, np.ndarray]:
+    """MACD 라인, 시그널, 히스토그램."""
+    n     = len(prices)
+    e_f   = ema(prices, fast)
+    e_s   = ema(prices, slow)
+    macd_ = e_f - e_s
+    sig_  = ema(macd_, signal)
+    hist  = macd_ - sig_
+    return macd_, sig_, hist
+
+
+# ── Stochastic ────────────────────────────────────────
+@nb.njit(cache=True, fastmath=True)
+def stochastic(
+    highs:  np.ndarray,
+    lows:   np.ndarray,
+    closes: np.ndarray,
+    k_period: int = 14,
+    d_period: int = 3,
+) -> tuple[np.ndarray, np.ndarray]:
+    """%K와 %D 스토캐스틱."""
+    n  = len(closes)
+    k  = np.full(n, np.nan)
+    d  = np.full(n, np.nan)
+    for i in range(k_period - 1, n):
+        lo = lows[i - k_period + 1 : i + 1].min()
+        hi = highs[i - k_period + 1 : i + 1].max()
+        rng = hi - lo
+        k[i] = (closes[i] - lo) / rng * 100.0 if rng > 0 else 50.0
+    # %D = SMA(K, d_period)
+    for i in range(k_period + d_period - 2, n):
+        valid = k[i - d_period + 1 : i + 1]
+        if not np.any(np.isnan(valid)):
+            d[i] = valid.mean()
+    return k, d
+
+
+# ── Williams %R ──────────────────────────────────────
+@nb.njit(cache=True, fastmath=True)
+def williams_r(
+    highs:   np.ndarray,
+    lows:    np.ndarray,
+    closes:  np.ndarray,
+    period:  int = 14,
+) -> np.ndarray:
+    """Williams %R (-100 ~ 0, -80 이하: 과매도)."""
+    n   = len(closes)
+    wr  = np.full(n, np.nan)
+    for i in range(period - 1, n):
+        hi  = highs[i - period + 1 : i + 1].max()
+        lo  = lows[i - period + 1 : i + 1].min()
+        rng = hi - lo
+        wr[i] = (hi - closes[i]) / rng * (-100.0) if rng > 0 else -50.0
+    return wr
+
+
+# ── OBV (On Balance Volume) ──────────────────────────
+@nb.njit(cache=True, fastmath=True)
+def obv(closes: np.ndarray, volumes: np.ndarray) -> np.ndarray:
+    """On Balance Volume."""
+    n      = len(closes)
+    result = np.zeros(n)
+    for i in range(1, n):
+        if closes[i] > closes[i - 1]:
+            result[i] = result[i - 1] + volumes[i]
+        elif closes[i] < closes[i - 1]:
+            result[i] = result[i - 1] - volumes[i]
+        else:
+            result[i] = result[i - 1]
+    return result
+

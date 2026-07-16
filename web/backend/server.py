@@ -438,6 +438,111 @@ async def calc_position_size(
     result = sizer.recommend(entry=entry, sl=sl, atr=atr)
     return result
 
+@app.get("/api/mtf-analysis")
+async def mtf_analysis(
+    symbol:    str = Query("BTC-USDT-SWAP"),
+    htf:       str = Query("4H"),
+    mtf_tf:    str = Query("1H"),
+    ltf:       str = Query("15m"),
+):
+    """멀티 타임프레임 통합 분석."""
+    from strategy.mtf_engine import MTFEngine, MTFConfig
+    from strategy.confluence_engine import ConfluenceEngine
+    tf_map = {"1m":Timeframe.M1,"5m":Timeframe.M5,"15m":Timeframe.M15,
+              "1H":Timeframe.H1,"4H":Timeframe.H4}
+    try:
+        htf_c = await exchange.get_candles(symbol, tf_map.get(htf, Timeframe.H4),   200)
+        mtf_c = await exchange.get_candles(symbol, tf_map.get(mtf_tf, Timeframe.H1),200)
+        ltf_c = await exchange.get_candles(symbol, tf_map.get(ltf, Timeframe.M15),  200)
+    except Exception as e:
+        return {"error": str(e)}
+
+    engine = MTFEngine(config=MTFConfig(
+        htf=tf_map.get(htf, Timeframe.H4),
+        mtf=tf_map.get(mtf_tf, Timeframe.H1),
+        ltf=tf_map.get(ltf, Timeframe.M15),
+    ))
+    result = engine.analyze(htf_c, mtf_c, ltf_c)
+
+    # 컨플루언스 점수
+    conf_engine = ConfluenceEngine()
+    conf = conf_engine.score(
+        direction=result.direction or "LONG",
+        ict_result=result.ltf_ict,
+        smc_result=result.mtf_smc,
+        mtf_result=result,
+    ) if result.direction else None
+
+    return {
+        "symbol":    symbol,
+        "timeframes": {"htf": htf, "mtf": mtf_tf, "ltf": ltf},
+        "direction": result.direction,
+        "aligned":   result.aligned,
+        "mtf_score": result.mtf_score,
+        "summary":   result.summary,
+        "confluence": {
+            "total": conf.total if conf else 0,
+            "grade": conf.grade if conf else "D",
+            "is_tradeable": conf.is_tradeable if conf else False,
+            "entry": conf.entry if conf else None,
+            "sl":    conf.sl    if conf else None,
+            "tp":    conf.tp    if conf else None,
+            "tp2":   conf.tp2   if conf else None,
+        } if conf else {},
+        "key_levels": {
+            "htf_bos":   getattr(result.htf_ict, "last_bos", None),
+            "mtf_fvg":   [{"top": z.top, "bot": z.bottom, "dir": z.direction}
+                          for z in getattr(result.mtf_smc, "fvg_zones", [])[:3]],
+            "mtf_ob":    [{"hi": ob.high, "lo": ob.low, "dir": ob.direction}
+                          for ob in getattr(result.mtf_smc, "order_blocks", [])[:3]
+                          if not ob.broken],
+            "eqh":       [e.price for e in getattr(result.mtf_smc, "equal_highs", [])[-2:]],
+            "eql":       [e.price for e in getattr(result.mtf_smc, "equal_lows",  [])[-2:]],
+        },
+        "confluence_reasons": conf.reasons[:6] if conf else [],
+    }
+
+@app.get("/api/indicators")
+async def get_indicators(
+    symbol:    str = Query("BTC-USDT-SWAP"),
+    timeframe: str = Query("15m"),
+    limit:     int = Query(200),
+):
+    """기술적 지표 데이터 (BB/MACD/Stoch/WR/OBV)."""
+    from indicators.base_indicators import (
+        bollinger_bands, macd, stochastic, williams_r, obv
+    )
+    tf_map = {"1m":Timeframe.M1,"15m":Timeframe.M15,"1H":Timeframe.H1}
+    tf = tf_map.get(timeframe, Timeframe.M15)
+    try:
+        candles = await exchange.get_candles(symbol, tf, limit)
+    except Exception as e:
+        return {"error": str(e)}
+    if len(candles) < 30:
+        return {"error": "데이터 부족"}
+
+    c = np.array([x.close  for x in candles])
+    h = np.array([x.high   for x in candles])
+    l = np.array([x.low    for x in candles])
+    v = np.array([x.volume for x in candles])
+    ts= [x.ts for x in candles]
+
+    bb_mid, bb_up, bb_lo = bollinger_bands(c, 20, 2.0)
+    macd_l, macd_s, macd_h= macd(c, 12, 26, 9)
+    stoch_k, stoch_d      = stochastic(h, l, c, 14, 3)
+    wr                    = williams_r(h, l, c, 14)
+    obv_v                 = obv(c, v)
+
+    def to_list(arr): return [round(float(x), 4) if not np.isnan(x) else None for x in arr]
+    return {
+        "ts":       ts,
+        "bb":       {"mid": to_list(bb_mid), "up": to_list(bb_up), "lo": to_list(bb_lo)},
+        "macd":     {"macd": to_list(macd_l), "signal": to_list(macd_s), "hist": to_list(macd_h)},
+        "stoch":    {"k": to_list(stoch_k), "d": to_list(stoch_d)},
+        "williams": to_list(wr),
+        "obv":      to_list(obv_v),
+    }
+
 @app.get("/api/status")
 async def get_status():
     return {

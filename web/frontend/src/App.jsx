@@ -14,6 +14,7 @@ import GridSearch from './components/GridSearch'
 import EquityCurve from './components/EquityCurve'
 import { SystemMonitor, PositionSizer } from './components/Monitor'
 import Settings from './components/Settings'
+import MTFAnalysis from './components/MTFAnalysis'
 
 const BOTTOM_TABS = [
   ['signals',    '🚀 신호'],
@@ -34,6 +35,7 @@ const RIGHT_TABS = [
   ['monitor',    '🖥️ 모니터'],
   ['sizer',      '📐 사이저'],
   ['settings',   '⚙️ 설정'],
+  ['mtf',        '🔭 MTF'],
 ]
 
 export default function App() {
@@ -100,6 +102,7 @@ export default function App() {
             {rightTab === 'monitor'    && <SystemMonitor />}
             {rightTab === 'sizer'      && <PositionSizer />}
             {rightTab === 'settings'   && <Settings />}
+            {rightTab === 'mtf'        && <MTFAnalysis />}
           </div>
         </div>
       </div>
